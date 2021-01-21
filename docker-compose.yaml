@@ -49,14 +49,11 @@ services:
       # LOST_PASSWORD_ENABLE: "true"
       # SMTP_HOST: smtp.postmarkapp.com
       # SMTP_PORT: 2525
-      # SMTP_USER: d12cc014-7190-4558-842c-f51bbba4efc3
-      # SMTP_PASS: d12cc014-7190-4558-842c-f51bbba4efc3
+      # SMTP_USER: 
+      # SMTP_PASS: 
       # SMTP_SECURE: "false"
       # SMTP_SENDER: "hello@beautifulthins.ee"
       # AUTO_ACTIVATE_NEW_USERS: "true"
-      # SPOTIFY_ENABLE: "true"
-      # SPOTIFY_CLIENT_ID: f1f8c3038db147c8bffa231044a40c58
-      # SPOTIFY_CLIENT_SECRET: d17b466fbdbe4655a71724b4da3ead46
   minio:
     image: minio/minio
     ports:
