@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- CSS goes here -->
+  <!-- CSS goes here -->
+  <style>
+    /* This is here because as of now, it is not possible in elm-ui to center element in the viewport.
+       So if your page in higher than the viewport, the popup will appear in the center of the page,
+       and you will need to scroll down to see it.
+    */
+    .popup {
+        position: fixed !important;
+        top: 0;
+        left: 0;
+        height: 100vh !important;
+        width: 100vw !important;
+    }
+    .corner-popup {
+        position: fixed !important;
+    }
+</style>
+</head>
+<body>
+  <!-- JavaScript goes here -->
+  <script src="/dist/elm.compiled.js"></script>
+  <script src="/bundle.js"></script>
+</body>
+</html>
