@@ -1,6 +1,6 @@
 module Responsive exposing (Responsive, fontSize, frw, frwf, make, pad)
 
-import Element exposing (Attr, Attribute, Device, DeviceClass(..), classifyDevice, paddingEach)
+import Element exposing (Attr, Attribute, Device, DeviceClass(..), Orientation(..), classifyDevice, paddingEach)
 import Element.Font as Font
 
 
@@ -14,17 +14,29 @@ minWidth =
 
 nominalWidth : Responsive -> Int
 nominalWidth r =
-    case r.device.class of
-        Phone ->
+    case ( r.device.class, r.device.orientation ) of
+        ( Phone, Portrait ) ->
             480
 
-        Tablet ->
-            950
+        ( Phone, Landscape ) ->
+            854
 
-        Desktop ->
+        ( Tablet, Portrait ) ->
+            1024
+
+        ( Tablet, Landscape ) ->
+            1366
+
+        ( Desktop, Portrait ) ->
+            1080
+
+        ( Desktop, Landscape ) ->
             1920
 
-        BigDesktop ->
+        ( BigDesktop, Portrait ) ->
+            1080
+
+        ( BigDesktop, Landscape ) ->
             1920
 
 
@@ -42,9 +54,7 @@ fontSize r x =
     (toFloat x / toFloat (nominalWidth r)) * toFloat r.width |> round |> Font.size
 
 
-
 -- Fraction width
-
 
 frw : Responsive -> Int -> Int
 frw r px =

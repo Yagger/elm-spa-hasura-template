@@ -23,10 +23,11 @@ centerContainer r onClose content =
         , height fill
         , pad r 7 106 7 106
         , scrollbarY
-        ] <|
+        ]
+    <|
         el
-            [ width ( fill |> maximum 600 )
-            , height ( shrink |> minimum 100 )
+            [ width (fill |> maximum 600)
+            , height (shrink |> minimum 100)
             , centerX
             , centerY
             , Bg.color palette.white
@@ -52,8 +53,8 @@ cornerContainer : Responsive -> msg -> Element msg -> Element msg
 cornerContainer r onClose content =
     el
         [ htmlAttribute <| class "corner-popup"
-        , width ( fill |> maximum 600 )
-        , height ( shrink |> minimum 100 )
+        , width (fill |> maximum 600)
+        , height (shrink |> minimum 100)
         , alignTop
         , alignRight
         , moveDown 2
@@ -81,9 +82,9 @@ view : Responsive -> { popup : Popup, onClose : msg } -> Element msg
 view r options =
     case options.popup of
         HttpError msg ->
-            cornerContainer r options.onClose
-                ( column [] [ text msg ]
-                )
+            cornerContainer r
+                options.onClose
+                (column [] [ text msg ])
 
         Closed ->
             none

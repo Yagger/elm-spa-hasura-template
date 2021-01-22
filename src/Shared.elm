@@ -1,15 +1,16 @@
 module Shared exposing
-    ( Flags
+    ( Auth(..)
+    , Flags
     , Model
     , Msg
     , init
     , subscriptions
     , update
     , view
-    , Auth(..)
     )
 
 import Api
+import Api.User
 import Browser
 import Browser.Dom
 import Browser.Events
@@ -23,10 +24,11 @@ import Http
 import Palette exposing (palette)
 import Responsive exposing (Responsive, fontSize)
 import Spa.Document exposing (Document)
+import Spa.Generated.Route as Route
 import Task
 import Time
 import Url exposing (Url)
-import Spa.Generated.Route as Route
+import Graphql.Http
 
 
 
@@ -39,7 +41,7 @@ type alias Flags =
 
 type Auth
     = Anonymous
-    | Authorized Api.JWT String
+    | Authorized Api.JWT String Api.User.User
 
 
 type alias Model =
@@ -80,6 +82,7 @@ type Msg
     | ClosePopup
     | ShowMenu
     | HideMenu
+    | GotUser ( Result (Graphql.Http.Error  Api.User.User ) Api.User.User )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -128,14 +131,18 @@ update msg model =
         TokenRefreshed result ->
             case result of
                 Ok jwt ->
-                    ( { model | auth = Authorized jwt ( Api.getUserIDFromJWT jwt ) }, Cmd.none )
+                    let
+                        userID = Api.getUserIDFromJWT jwt
+                    in
+                    ( { model | auth = Authorized jwt userID Api.User.emptyUser }, Api.User.fetchUser userID jwt.jwt_token GotUser )
 
                 Err error ->
                     case error of
-                        ( Http.BadStatus 401 ) ->
-                            ( { model | auth = Anonymous } , Nav.replaceUrl model.key ( Route.toString Route.Login ) )
+                        Http.BadStatus 401 ->
+                            ( { model | auth = Anonymous }, Nav.replaceUrl model.key (Route.toString Route.Login) )
+
                         _ ->
-                            ( { model | auth = Anonymous, popup = Popup.HttpError <| Api.errorToString error } , Nav.replaceUrl model.key ( Route.toString Route.Login ) )
+                            ( { model | auth = Anonymous, popup = Popup.HttpError <| Api.errorToString error }, Nav.replaceUrl model.key (Route.toString Route.Login) )
 
         ClosePopup ->
             ( { model | popup = Popup.Closed }, Cmd.none )
@@ -146,14 +153,24 @@ update msg model =
         HideMenu ->
             ( { model | mobileMenu = False }, Cmd.none )
 
+        GotUser result ->
+            case ( result, model.auth ) of
+                ( Ok user, Authorized jwt userID _ ) ->
+                    ( { model | auth = Authorized jwt userID user }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
         [ Browser.Events.onResize OnResize
         , case model.auth of
-            Authorized jwt userID ->
-                Time.every ( toFloat jwt.jwt_expires_in ) RefreshToken
+            Authorized jwt userID user ->
+                Time.every (toFloat jwt.jwt_expires_in) RefreshToken
+
             _ ->
                 Sub.none
         ]
@@ -229,6 +246,7 @@ header model toMsg =
     case model.auth of
         Anonymous ->
             none
+
         _ ->
             row []
                 [ text "Header"

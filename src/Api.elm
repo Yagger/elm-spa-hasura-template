@@ -1,23 +1,22 @@
 module Api exposing (..)
 
-import Conf
-import Http
-import Json.Decode as D
-import Json.Encode as E
-import Http exposing (expectWhatever)
 import Array
 import Base64
+import Conf
+import Http exposing (expectWhatever)
+import Json.Decode as D
+import Json.Encode as E
+import Graphql.Operation
+import Conf
+import Graphql.SelectionSet exposing (SelectionSet)
+import Graphql.Http
 
 
 type alias JWT =
     { jwt_token : String
     , jwt_expires_in : Int
     }
-type alias User =
-    { id : String
-    , email : String
-    , name : String 
-    }
+
 
 getUserIDFromJWT : JWT -> String
 getUserIDFromJWT jwt =
@@ -27,13 +26,16 @@ getUserIDFromJWT jwt =
         |> Maybe.withDefault ""
         |> Base64.decode
         |> Result.withDefault ""
-        |> D.decodeString ( D.at [ "https://hasura.io/jwt/claims", "x-hasura-user-id" ] D.string )
+        |> D.decodeString (D.at [ "https://hasura.io/jwt/claims", "x-hasura-user-id" ] D.string)
         |> Result.withDefault ""
+
 
 type alias LoginForm =
     { email : String
     , password : String
     }
+
+
 loginFormEncode : LoginForm -> E.Value
 loginFormEncode form =
     E.object
@@ -41,11 +43,14 @@ loginFormEncode form =
         , ( "password", E.string form.password )
         ]
 
+
 type alias ErrorResponse =
     { statusCode : Int
     , error : String
     , message : String
     }
+
+
 errorResponseDecoder : D.Decoder ErrorResponse
 errorResponseDecoder =
     D.map3 ErrorResponse
@@ -73,6 +78,7 @@ refreshToken onResponse =
         , tracker = Nothing
         }
 
+
 register : LoginForm -> (Result Http.Error () -> msg) -> Cmd msg
 register form onResponse =
     Http.post
@@ -80,6 +86,7 @@ register form onResponse =
         , body = Http.jsonBody <| loginFormEncode form
         , expect = expectWhatever onResponse
         }
+
 
 login : LoginForm -> (Result Http.Error JWT -> msg) -> Cmd msg
 login form onResponse =
@@ -136,6 +143,7 @@ expectJson toMsg successDecoder failureDecoder =
 
                                 Err err ->
                                     Err (Http.BadBody (D.errorToString err))
+
                         _ ->
                             Err (Http.BadStatus metadata.statusCode)
 
@@ -146,3 +154,15 @@ expectJson toMsg successDecoder failureDecoder =
 
                         Err err ->
                             Err (Http.BadBody (D.errorToString err))
+
+
+query :
+    String ->
+    SelectionSet decodesTo Graphql.Operation.RootQuery -> 
+    ( Result ( Graphql.Http.Error decodesTo ) decodesTo -> msg) ->
+    Cmd msg
+query token selectionSet onResponse =
+    selectionSet
+        |> Graphql.Http.queryRequest Conf.graphqlUrl
+        |> Graphql.Http.withHeader "authorization" ( "Bearer " ++ token )
+        |> Graphql.Http.send onResponse
