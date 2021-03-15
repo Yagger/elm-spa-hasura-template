@@ -20,6 +20,8 @@ import Components.Popup as Popup exposing (Popup)
 import Element exposing (..)
 import Element.Background as Bg
 import Element.Font as Font
+import Element.Input as In
+import Graphql.Http
 import Http
 import Palette exposing (palette)
 import Responsive exposing (Responsive, fontSize)
@@ -28,7 +30,6 @@ import Spa.Generated.Route as Route
 import Task
 import Time
 import Url exposing (Url)
-import Graphql.Http
 
 
 
@@ -40,8 +41,10 @@ type alias Flags =
 
 
 type Auth
-    = Anonymous
-    | Authorized Api.JWT String Api.User.User
+    = Loading
+    | Anonymous
+    | UserLoading Api.JWT
+    | Authorized Api.JWT Api.User.User
 
 
 type alias Model =
@@ -59,7 +62,7 @@ init flags url key =
     ( { url = url
       , key = key
       , r = Responsive.make 0 0
-      , auth = Anonymous
+      , auth = Loading
       , popup = Popup.Closed
       , mobileMenu = False
       }
@@ -82,7 +85,9 @@ type Msg
     | ClosePopup
     | ShowMenu
     | HideMenu
-    | GotUser ( Result (Graphql.Http.Error  Api.User.User ) Api.User.User )
+    | GotUser Api.JWT (Result (Graphql.Http.Error (Maybe Api.User.User)) (Maybe Api.User.User))
+    | Logout
+    | OnLoggedOut (Result Http.Error ())
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -132,17 +137,27 @@ update msg model =
             case result of
                 Ok jwt ->
                     let
-                        userID = Api.getUserIDFromJWT jwt
+                        userID =
+                            Api.getUserIDFromJWT jwt
                     in
-                    ( { model | auth = Authorized jwt userID Api.User.emptyUser }, Api.User.fetchUser userID jwt.jwt_token GotUser )
+                    ( { model | auth = UserLoading jwt }, Api.User.fetchUser userID jwt.jwt_token <| GotUser jwt )
 
                 Err error ->
                     case error of
                         Http.BadStatus 401 ->
-                            ( { model | auth = Anonymous }, Nav.replaceUrl model.key (Route.toString Route.Login) )
+                            let
+                                cmd =
+                                    case Route.fromUrl model.url of
+                                        Just Route.Top ->
+                                            Cmd.none
+
+                                        _ ->
+                                            Nav.replaceUrl model.key (Route.toString Route.Login)
+                            in
+                            ( { model | auth = Anonymous }, cmd )
 
                         _ ->
-                            ( { model | auth = Anonymous, popup = Popup.HttpError <| Api.errorToString error }, Nav.replaceUrl model.key (Route.toString Route.Login) )
+                            ( { model | auth = Anonymous, popup = Popup.HttpError <| Api.httpErrorToString error }, Nav.replaceUrl model.key (Route.toString Route.Login) )
 
         ClosePopup ->
             ( { model | popup = Popup.Closed }, Cmd.none )
@@ -153,14 +168,29 @@ update msg model =
         HideMenu ->
             ( { model | mobileMenu = False }, Cmd.none )
 
-        GotUser result ->
-            case ( result, model.auth ) of
-                ( Ok user, Authorized jwt userID _ ) ->
-                    ( { model | auth = Authorized jwt userID user }, Cmd.none )
+        GotUser jwt result ->
+            case result of
+                Ok maybeUser ->
+                    case maybeUser of
+                        Just user ->
+                            ( { model | auth = Authorized jwt user }, Cmd.none )
 
-                _ ->
+                        Nothing ->
+                            ( { model | popup = Popup.HttpError "Failed to fetch account data" }, Cmd.none )
+
+                Err error ->
+                    ( { model | popup = Popup.HttpError <| Api.graphqlErrorToString error }, Cmd.none )
+
+        Logout ->
+            ( { model | auth = Anonymous }, Api.logout OnLoggedOut )
+
+        OnLoggedOut result ->
+            case result of
+                Ok _ ->
                     ( model, Cmd.none )
 
+                Err error ->
+                    ( { model | popup = Popup.HttpError <| Api.httpErrorToString error }, Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
@@ -168,7 +198,7 @@ subscriptions model =
     Sub.batch
         [ Browser.Events.onResize OnResize
         , case model.auth of
-            Authorized jwt userID user ->
+            Authorized jwt user ->
                 Time.every (toFloat jwt.jwt_expires_in) RefreshToken
 
             _ ->
@@ -243,14 +273,38 @@ header model toMsg =
         r =
             model.r
     in
-    case model.auth of
-        Anonymous ->
-            none
-
-        _ ->
-            row []
-                [ text "Header"
+    row [ width fill, height <| px 80, paddingXY 100 0 ]
+        (case model.auth of
+            Anonymous ->
+                [ el [ Font.bold ] <| text "HEADER"
+                , row [ spacing 50, alignRight ]
+                    [ link [] { url = Route.toString Route.Login, label = text "Login" }
+                    , link [] { url = Route.toString Route.Register, label = text "Register" }
+                    ]
                 ]
+
+            Loading ->
+                [ el [ Font.bold ] <| text "HEADER"
+                , el [ alignRight ] <| text "Loading user"
+                ]
+
+            UserLoading jwt ->
+                [ el [ Font.bold ] <| text "HEADER"
+                , el [ alignRight ] <| text "User loading"
+                ]
+
+            Authorized jwt user ->
+                [ el [ Font.bold ] <| text "HEADER"
+                , row [ spacing 50, alignRight ]
+                    [ text user.account.email
+                    , In.button
+                        []
+                        { onPress = Just <| toMsg Logout
+                        , label = text "Logout"
+                        }
+                    ]
+                ]
+        )
 
 
 mobileHeader : Model -> (Msg -> msg) -> Element msg
@@ -270,6 +324,6 @@ footer model toMsg =
         r =
             model.r
     in
-    row []
-        [ none
+    row [ width fill, height <| px 80, paddingXY 100 0 ]
+        [ el [ Font.italic, Font.size 10 ] <| text "FOOTER"
         ]

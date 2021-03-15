@@ -1,21 +1,21 @@
 module Pages.Register exposing (Model, Msg, Params, page)
 
 import Api
+import Api.User
 import Browser.Navigation as Nav exposing (Key)
 import Components.Popup as Popup exposing (Popup)
 import Element exposing (..)
 import Element.Font as Font
 import Element.Input as In
+import Graphql.Http
 import Http
 import Responsive exposing (Responsive, fontSize, frw, pad)
-import Shared
+import Shared exposing (Auth(..))
 import Spa.Document exposing (Document)
 import Spa.Generated.Route as Route
 import Spa.Page as Page exposing (Page)
 import Spa.Url exposing (Url)
 import Utils
-import Api.User
-import Graphql.Http
 
 
 page : Page Params Model Msg
@@ -64,7 +64,7 @@ type Msg
     | OnRegister (Result Http.Error ())
     | OnLogin (Result Http.Error Api.JWT)
     | ClosePopup
-    | GotUser ( Result (Graphql.Http.Error  Api.User.User ) Api.User.User )
+    | GotUser Api.JWT (Result (Graphql.Http.Error (Maybe Api.User.User)) (Maybe Api.User.User))
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -79,35 +79,41 @@ update msg model =
         Register ->
             ( model, Api.register { email = model.email, password = model.password } OnRegister )
 
+        ClosePopup ->
+            ( { model | popup = Popup.Closed }, Cmd.none )
+
         OnRegister result ->
             case result of
-                Ok () ->
+                Ok _ ->
                     ( model, Api.login { email = model.email, password = model.password } OnLogin )
 
                 Err error ->
-                    ( { model | popup = Popup.HttpError <| Api.errorToString error }, Utils.delay 5000 ClosePopup )
+                    ( { model | popup = Popup.HttpError <| Api.httpErrorToString error }, Utils.delay 5000 ClosePopup )
 
         OnLogin result ->
             case result of
                 Ok jwt ->
                     let
-                        userID = Api.getUserIDFromJWT jwt
+                        userID =
+                            Api.getUserIDFromJWT jwt
                     in
-                    ( { model | auth = Shared.Authorized jwt userID Api.User.emptyUser }, Api.User.fetchUser userID jwt.jwt_token GotUser )
+                    ( { model | auth = UserLoading jwt }, Api.User.fetchUser userID jwt.jwt_token <| GotUser jwt )
 
                 Err error ->
-                    ( { model | popup = Popup.HttpError <| Api.errorToString error }, Utils.delay 5000 ClosePopup )
+                    ( { model | popup = Popup.HttpError <| Api.httpErrorToString error }, Utils.delay 5000 ClosePopup )
 
-        ClosePopup ->
-            ( { model | popup = Popup.Closed }, Cmd.none )
+        GotUser jwt result ->
+            case result of
+                Ok maybeUser ->
+                    case maybeUser of
+                        Just user ->
+                            ( { model | auth = Authorized jwt user }, Nav.replaceUrl model.key (Route.toString Route.Protected) )
 
-        GotUser result ->
-            case ( result, model.auth ) of
-                ( Ok user, Shared.Authorized jwt userID _ ) ->
-                    ( { model | auth = Shared.Authorized jwt userID user }, Nav.replaceUrl model.key (Route.toString Route.Top) )
+                        Nothing ->
+                            ( { model | popup = Popup.HttpError "Failed to fetch account data" }, Cmd.none )
 
-                _ ->
-                    ( model, Cmd.none )
+                Err error ->
+                    ( { model | popup = Popup.HttpError <| Api.graphqlErrorToString error }, Cmd.none )
 
 
 save : Model -> Shared.Model -> Shared.Model

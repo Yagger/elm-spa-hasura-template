@@ -54,7 +54,9 @@ fontSize r x =
     (toFloat x / toFloat (nominalWidth r)) * toFloat r.width |> round |> Font.size
 
 
+
 -- Fraction width
+
 
 frw : Responsive -> Int -> Int
 frw r px =

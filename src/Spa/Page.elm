@@ -1,6 +1,7 @@
 module Spa.Page exposing
     ( Page
     , static, sandbox, element, application
+    , protectedApplication
     )
 
 {-|
@@ -11,8 +12,12 @@ module Spa.Page exposing
 
 -}
 
-import Shared
+import Api
+import Api.User
+import Browser.Navigation as Nav exposing (Key)
+import Shared exposing (Auth(..))
 import Spa.Document exposing (Document)
+import Spa.Generated.Route as Route
 import Spa.Url exposing (Url)
 
 
@@ -89,3 +94,58 @@ application page =
 ignoreEffect : model -> ( model, Cmd msg )
 ignoreEffect model =
     ( model, Cmd.none )
+
+
+type alias ProtectedModel model params =
+    { model
+        | url : Url params
+        , key : Key
+        , jwt : Api.JWT
+        , user : Api.User.User
+    }
+
+
+protectedApplication :
+    { init : Api.JWT -> Api.User.User -> Shared.Model -> Url params -> ( ProtectedModel model params, Cmd msg )
+    , update : msg -> ProtectedModel model params -> ( ProtectedModel model params, Cmd msg )
+    , view : ProtectedModel model params -> Document msg
+    , subscriptions : ProtectedModel model params -> Sub msg
+    , save : ProtectedModel model params -> Shared.Model -> Shared.Model
+    , load : Shared.Model -> ProtectedModel model params -> ( ProtectedModel model params, Cmd msg )
+    }
+    -> Page params (ProtectedModel model params) msg
+protectedApplication page =
+    { init =
+        \shared params ->
+            case shared.auth of
+                Loading ->
+                    ( page.init Api.emptyJWT Api.User.emptyUser shared params |> Tuple.first, Cmd.none )
+
+                Anonymous ->
+                    ( page.init Api.emptyJWT Api.User.emptyUser shared params |> Tuple.first, Nav.pushUrl params.key (Route.toString Route.Login) )
+
+                UserLoading jwt ->
+                    ( page.init jwt Api.User.emptyUser shared params |> Tuple.first, Cmd.none )
+
+                Authorized jwt user ->
+                    page.init jwt user shared params
+    , update = page.update
+    , view = page.view
+    , subscriptions = page.subscriptions
+    , save = page.save
+    , load =
+        \shared_ model_ ->
+            case shared_.auth of
+                Authorized jwt user ->
+                    if model_.user == Api.User.emptyUser then
+                        page.init jwt user shared_ model_.url
+
+                    else
+                        page.load shared_ model_
+
+                Anonymous ->
+                    ( model_, Nav.pushUrl model_.key (Route.toString Route.Login) )
+
+                _ ->
+                    page.load shared_ model_
+    }
